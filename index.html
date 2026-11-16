@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>元太科技 8069 即時股價</title>
+<title>台股即時股價｜元太・台虹・漢磊・國巨</title>
 <style>
   :root{
     --bg:#f4f5f7; --card:#fff; --ink:#1d2330; --muted:#6b7280; --line:#e5e7eb;
@@ -14,84 +14,97 @@
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
-       background:var(--bg);color:var(--ink);display:flex;justify-content:center;padding:32px 16px}
-  .card{width:100%;max-width:560px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
-  header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+       background:var(--bg);color:var(--ink);padding:28px 16px}
+  .wrap{max-width:1080px;margin:0 auto}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}
   h1{margin:0;font-size:22px}
-  .code{color:var(--muted);font-size:14px;margin-top:4px}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px}
+  .controls label{display:flex;align-items:center;gap:6px;cursor:pointer}
   button{border:0;background:var(--accent);color:#fff;font-size:15px;padding:10px 18px;border-radius:10px;cursor:pointer;
          display:flex;align-items:center;gap:6px;white-space:nowrap}
   button:disabled{opacity:.6;cursor:wait}
   .spin{display:inline-block}
   button:disabled .spin{animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .price-row{display:flex;align-items:baseline;gap:14px;margin:26px 0 6px;flex-wrap:wrap}
-  .price{font-size:52px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
-  .chg{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .name{font-size:18px;font-weight:700}
+  .code{color:var(--muted);font-size:13px;margin-top:2px}
+  .price-row{display:flex;align-items:baseline;gap:12px;margin:16px 0 4px;flex-wrap:wrap}
+  .price{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .chg{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
   .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
-  .time{color:var(--muted);font-size:13px}
-  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);
-        border-radius:12px;overflow:hidden;margin-top:22px}
-  .grid div{background:var(--card);padding:12px}
-  .grid span{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
-  .grid b{font-size:17px;font-variant-numeric:tabular-nums}
-  svg{width:100%;height:120px;margin-top:20px;display:block}
-  .foot{display:flex;justify-content:space-between;align-items:center;margin-top:18px;color:var(--muted);font-size:13px;gap:10px;flex-wrap:wrap}
-  .foot label{display:flex;align-items:center;gap:6px;cursor:pointer}
-  .msg{margin-top:14px;font-size:13px;color:var(--up);min-height:1em}
-  .note{color:var(--muted);font-size:12px;margin-top:18px;line-height:1.6}
+  .time{color:var(--muted);font-size:12px;min-height:1.2em}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);
+        border-radius:10px;overflow:hidden;margin-top:14px}
+  .stats div{background:var(--card);padding:8px 10px}
+  .stats span{display:block;color:var(--muted);font-size:11px;margin-bottom:2px}
+  .stats b{font-size:14px;font-variant-numeric:tabular-nums;font-weight:600}
+  svg{width:100%;height:70px;margin-top:12px;display:block}
+  .chart-label{color:var(--muted);font-size:11px;margin-top:2px}
+  .msg{margin-top:8px;font-size:12px;color:var(--up);min-height:1em}
+  .note{color:var(--muted);font-size:12px;margin-top:20px;line-height:1.6}
 </style>
 </head>
 <body>
-<main class="card">
-  <header>
+<div class="wrap">
+  <div class="top">
     <div>
-      <h1>元太科技 E Ink Holdings</h1>
-      <div class="code">8069 · 上櫃（TPEx）· 新台幣</div>
+      <h1>台股即時股價</h1>
+      <div class="sub" id="status">載入中…</div>
     </div>
-    <button id="refresh"><span class="spin">⟳</span> 更新</button>
-  </header>
-
-  <div class="price-row">
-    <div class="price" id="price">--</div>
-    <div class="chg" id="chg"></div>
-  </div>
-  <div class="time" id="time">載入中…</div>
-
-  <div class="grid">
-    <div><span>開盤</span><b id="open">--</b></div>
-    <div><span>最高</span><b id="high">--</b></div>
-    <div><span>最低</span><b id="low">--</b></div>
-    <div><span>昨收</span><b id="prev">--</b></div>
-    <div><span>成交量（張）</span><b id="vol">--</b></div>
-    <div><span>買 / 賣</span><b id="ba">--</b></div>
+    <div class="controls">
+      <label><input type="checkbox" id="auto"> 盤中每 30 秒自動更新</label>
+      <button id="refresh"><span class="spin">⟳</span> 更新</button>
+    </div>
   </div>
 
-  <svg id="chart" viewBox="0 0 500 120" preserveAspectRatio="none" aria-label="近期走勢"></svg>
-  <div class="time" id="chartLabel"></div>
-
-  <div class="foot">
-    <label><input type="checkbox" id="auto"> 盤中每 30 秒自動更新</label>
-    <span id="src"></span>
-  </div>
-  <div class="msg" id="msg"></div>
+  <div class="grid-cards" id="cards"></div>
 
   <p class="note">資料來源：即時報價取自臺灣證券交易所基本市況報導（MIS，經 r.jina.ai 轉送）；走勢圖與備援收盤價取自 FinMind。
     報價可能有數秒延遲，僅供參考，不構成投資建議。</p>
-</main>
+</div>
 
 <script>
-const SYMBOL = "8069";
-// 即時報價：證交所 MIS，經 r.jina.ai 轉送（GitHub Pages 無法直接跨網域呼叫證交所）
+// 要顯示的股票：market 為 tse（上市）或 otc（上櫃）
+const STOCKS = [
+  {code: "8069", name: "元太科技", en: "E Ink Holdings", market: "otc"},
+  {code: "8039", name: "台虹",     en: "Taiflex",        market: "tse"},
+  {code: "3707", name: "漢磊",     en: "Episil",         market: "otc"},
+  {code: "2327", name: "國巨",     en: "Yageo",          market: "tse"},
+];
+const MARKET_LABEL = {tse: "上市（TWSE）", otc: "上櫃（TPEx）"};
+
 const MIS_URL = () =>
-  `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${SYMBOL}.tw&json=1&delay=0&_=${Date.now()}`;
-// 備援與走勢圖：FinMind 日成交資料（支援跨網域）
-const FINMIND_URL = start =>
-  `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${SYMBOL}&start_date=${start}`;
+  `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${STOCKS.map(s => `${s.market}_${s.code}.tw`).join("%7C")}&json=1&delay=0&_=${Date.now()}`;
+const FINMIND_URL = (code, start) =>
+  `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${start}`;
 
 const $ = id => document.getElementById(id);
 const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
 const fmt = (n, d = 2) => n == null ? "--" : n.toLocaleString("zh-TW", {minimumFractionDigits:d, maximumFractionDigits:d});
+
+// 建立卡片
+$("cards").innerHTML = STOCKS.map(s => `
+  <section class="card" id="c${s.code}">
+    <div class="name">${s.name} <span style="font-weight:400;color:var(--muted);font-size:14px">${s.en}</span></div>
+    <div class="code">${s.code} · ${MARKET_LABEL[s.market]}</div>
+    <div class="price-row"><div class="price" data-f="price">--</div><div class="chg" data-f="chg"></div></div>
+    <div class="time" data-f="time"></div>
+    <div class="stats">
+      <div><span>開盤</span><b data-f="open">--</b></div>
+      <div><span>最高</span><b data-f="high">--</b></div>
+      <div><span>最低</span><b data-f="low">--</b></div>
+      <div><span>昨收</span><b data-f="prev">--</b></div>
+      <div><span>成交量（張）</span><b data-f="vol">--</b></div>
+      <div><span>買 / 賣</span><b data-f="ba">--</b></div>
+    </div>
+    <svg data-f="chart" viewBox="0 0 500 70" preserveAspectRatio="none"></svg>
+    <div class="chart-label" data-f="chartLabel"></div>
+    <div class="msg" data-f="msg"></div>
+  </section>`).join("");
+const field = (code, f) => document.querySelector(`#c${code} [data-f="${f}"]`);
 
 async function fetchWithTimeout(url, opts = {}, ms = 15000){
   const ctrl = new AbortController();
@@ -105,46 +118,53 @@ async function fetchWithTimeout(url, opts = {}, ms = 15000){
   }finally{ clearTimeout(t); }
 }
 
-async function fromMIS(){
+// 一次取得全部股票的即時報價
+async function fetchLive(){
   const text = await fetchWithTimeout(`https://r.jina.ai/${MIS_URL()}`,
     {headers: {"X-No-Cache": "true", "X-Return-Format": "text"}});
   const m = text.match(/\{"msgArray"[\s\S]*\}/);
   if (!m) throw new Error("即時報價格式錯誤");
-  const s = JSON.parse(m[0]).msgArray[0];
-  if (!s) throw new Error("即時報價無資料");
-  const bids = (s.b || "").split("_").map(num).filter(Boolean);
-  const asks = (s.a || "").split("_").map(num).filter(Boolean);
-  // z 為最近成交價；"-" 表示該 5 秒無成交，改用 trade.z（最後一筆成交），再不行用買賣中點
-  let price = num(s.z) ?? num(s.trade && s.trade.z);
-  if (price == null && bids[0] && asks[0]) price = (bids[0] + asks[0]) / 2;
-  if (price == null) price = bids[0] || asks[0] || null;
-  return {
-    price, prev: num(s.y), open: num(s.o), high: num(s.h), low: num(s.l),
-    vol: s.v ? parseInt(s.v, 10) : null, bid: bids[0], ask: asks[0],
-    time: s.tlong ? new Date(parseInt(s.tlong, 10)) : new Date(),
-    source: "證交所即時報價",
-  };
+  const out = {};
+  for (const s of JSON.parse(m[0]).msgArray || []){
+    const bids = (s.b || "").split("_").map(num).filter(Boolean);
+    const asks = (s.a || "").split("_").map(num).filter(Boolean);
+    // z 為最近成交價；"-" 表示該 5 秒無成交，改用 trade.z（最後一筆成交），再不行用買賣中點
+    let price = num(s.z) ?? num(s.trade && s.trade.z);
+    if (price == null && bids[0] && asks[0]) price = (bids[0] + asks[0]) / 2;
+    if (price == null) price = bids[0] || asks[0] || null;
+    out[s.c] = {
+      price, prev: num(s.y), open: num(s.o), high: num(s.h), low: num(s.l),
+      vol: s.v ? parseInt(s.v, 10) : null, bid: bids[0], ask: asks[0],
+      time: s.tlong ? new Date(parseInt(s.tlong, 10)) : new Date(), live: true,
+    };
+  }
+  return out;
+}
+async function fetchLiveRetry(){
+  try{ return await fetchLive(); }
+  catch(e){ return await fetchLive(); }   // 轉送服務偶爾很慢，失敗就再試一次
 }
 
-async function fetchDaily(){
+const dailyCache = {};
+async function fetchDaily(code){
+  if (dailyCache[code]) return dailyCache[code];
   const d = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
-  const j = JSON.parse(await fetchWithTimeout(FINMIND_URL(d)));
+  const j = JSON.parse(await fetchWithTimeout(FINMIND_URL(code, d)));
   if (!j.data || !j.data.length) throw new Error("日資料無內容");
-  return j.data;
+  return dailyCache[code] = j.data;
 }
-
 function fromDaily(rows){
   const last = rows[rows.length - 1], before = rows[rows.length - 2];
   return {
     price: last.close, prev: before ? before.close : last.close - last.spread,
     open: last.open, high: last.max, low: last.min,
     vol: Math.round(last.Trading_Volume / 1000), bid: null, ask: null,
-    time: new Date(last.date + "T13:30:00+08:00"), source: "FinMind 收盤資料",
+    time: new Date(last.date + "T13:30:00+08:00"), live: false,
   };
 }
 
-function drawChart(rows, livePrice, cls){
-  const svg = $("chart");
+function drawChart(code, rows, livePrice, cls){
+  const svg = field(code, "chart");
   if (!rows || rows.length < 2){ svg.innerHTML = ""; return; }
   const today = new Date().toLocaleDateString("sv-SE", {timeZone: "Asia/Taipei"});
   const series = rows.map(r => r.close);
@@ -153,7 +173,7 @@ function drawChart(rows, livePrice, cls){
     else series.push(livePrice);
   }
   const min = Math.min(...series), max = Math.max(...series), span = (max - min) || 1;
-  const W = 500, H = 120, pad = 6;
+  const W = 500, H = 70, pad = 5;
   const x = i => i / (series.length - 1) * W;
   const y = v => pad + (1 - (v - min) / span) * (H - pad * 2);
   const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
@@ -161,66 +181,69 @@ function drawChart(rows, livePrice, cls){
     .getPropertyValue(cls === "down" ? "--down" : cls === "up" ? "--up" : "--flat");
   svg.innerHTML =
     `<polygon points="0,${H} ${pts} ${W},${H}" fill="${color}" fill-opacity=".08"/>` +
-    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
-    `<circle cx="${x(series.length - 1)}" cy="${y(series[series.length - 1])}" r="3.5" fill="${color}"/>`;
-  $("chartLabel").textContent = `近 ${series.length} 個交易日收盤走勢（${fmt(min)} – ${fmt(max)}）`;
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+  field(code, "chartLabel").textContent = `近 ${series.length} 個交易日收盤走勢（${fmt(min)} – ${fmt(max)}）`;
 }
 
-function render(d){
+function render(code, d){
   const diff = d.price != null && d.prev != null ? d.price - d.prev : null;
   const cls = diff == null || Math.abs(diff) < 1e-9 ? "flat" : diff > 0 ? "up" : "down";
-  $("price").textContent = fmt(d.price);
-  $("price").className = "price " + cls;
-  $("chg").className = "chg " + cls;
-  $("chg").textContent = diff == null ? "" :
+  const p = field(code, "price"), c = field(code, "chg");
+  p.textContent = fmt(d.price); p.className = "price " + cls;
+  c.className = "chg " + cls;
+  c.textContent = diff == null ? "" :
     `${diff > 0 ? "▲" : diff < 0 ? "▼" : ""} ${fmt(Math.abs(diff))} (${diff >= 0 ? "+" : "-"}${fmt(Math.abs(diff / d.prev * 100))}%)`;
-  $("open").textContent = fmt(d.open);
-  $("high").textContent = fmt(d.high);
-  $("low").textContent = fmt(d.low);
-  $("prev").textContent = fmt(d.prev);
-  $("vol").textContent = d.vol == null ? "--" : d.vol.toLocaleString("zh-TW");
-  $("ba").textContent = d.bid || d.ask ? `${fmt(d.bid)} / ${fmt(d.ask)}` : "--";
-  $("time").textContent = "資料時間：" + d.time.toLocaleString("zh-TW", {hour12:false}) +
-    "　·　擷取於 " + new Date().toLocaleTimeString("zh-TW", {hour12:false});
-  $("src").textContent = "來源：" + d.source;
-  document.title = `${fmt(d.price)} ${diff > 0 ? "▲" : diff < 0 ? "▼" : ""} 元太 8069`;
+  field(code, "open").textContent = fmt(d.open);
+  field(code, "high").textContent = fmt(d.high);
+  field(code, "low").textContent = fmt(d.low);
+  field(code, "prev").textContent = fmt(d.prev);
+  field(code, "vol").textContent = d.vol == null ? "--" : d.vol.toLocaleString("zh-TW");
+  field(code, "ba").textContent = d.bid || d.ask ? `${fmt(d.bid)} / ${fmt(d.ask)}` : "--";
+  field(code, "time").textContent = (d.live ? "即時 " : "收盤 ") +
+    d.time.toLocaleString("zh-TW", {hour12:false, month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit", second:"2-digit"});
   return cls;
 }
 
-let busy = false, dailyCache = null;
-async function fromMISRetry(){
-  try{ return await fromMIS(); }
-  catch(e){ return await fromMIS(); }   // 轉送服務偶爾很慢，失敗就再試一次
-}
+const shown = {};   // 每檔目前畫面上的資料是否為即時
+let busy = false;
 async function update(){
   if (busy) return;
-  busy = true; $("refresh").disabled = true; $("msg").textContent = "";
-  $("src").textContent = "正在取得即時報價…";
-  if ($("price").textContent === "--") $("time").textContent = "載入中…";
-  let liveDone = false;
-  const liveP = fromMISRetry().finally(() => { liveDone = true; });
+  busy = true; $("refresh").disabled = true;
+  $("status").textContent = "正在取得即時報價…";
+  STOCKS.forEach(s => field(s.code, "msg").textContent = "");
+
+  const liveP = fetchLiveRetry();
+  let liveDone = false; liveP.finally(() => { liveDone = true; }).catch(() => {});
+
   // 先拿日資料畫圖；若即時報價還沒到，先顯示最近收盤
+  await Promise.allSettled(STOCKS.map(async s => {
+    try{
+      const rows = await fetchDaily(s.code);
+      if (!liveDone && !shown[s.code]){
+        drawChart(s.code, rows, null, render(s.code, fromDaily(rows)));
+        shown[s.code] = "daily";
+      }
+    }catch(e){}
+  }));
+
   try{
-    if (!dailyCache) dailyCache = await fetchDaily();
-    if (!liveDone && $("price").textContent === "--"){
-      const cls = render(fromDaily(dailyCache));
-      $("src").textContent = "先顯示最近收盤，正在取得即時報價…";
-      drawChart(dailyCache, null, cls);
+    const live = await liveP;
+    for (const s of STOCKS){
+      const d = live[s.code];
+      if (!d){ field(s.code, "msg").textContent = "即時報價無此檔資料"; continue; }
+      drawChart(s.code, dailyCache[s.code], d.price, render(s.code, d));
+      shown[s.code] = "live";
     }
-  }catch(e){}
-  try{
-    const d = await liveP;
-    const cls = render(d);
-    drawChart(dailyCache, d.price, cls);
+    $("status").textContent = "最後更新：" + new Date().toLocaleTimeString("zh-TW", {hour12:false});
   }catch(e){
-    if (dailyCache){
-      if ($("price").textContent === "--") render(fromDaily(dailyCache));
-      $("src").textContent = "來源：FinMind 收盤資料";
-      $("msg").textContent = "即時報價暫時無法取得（" + e.message + "），請稍後再按「更新」。";
-    }else{
-      $("msg").textContent = "更新失敗：" + e.message + "，請稍後再按「更新」。";
-      $("time").textContent = "";
+    for (const s of STOCKS){
+      if (!shown[s.code] && dailyCache[s.code]){
+        drawChart(s.code, dailyCache[s.code], null, render(s.code, fromDaily(dailyCache[s.code])));
+        shown[s.code] = "daily";
+      }
     }
+    $("status").textContent = "即時報價暫時無法取得（" + e.message + "）" +
+      (Object.keys(shown).length ? "，目前顯示最近收盤或上次資料。請稍後再按「更新」。" : "，請稍後再按「更新」。");
   }finally{
     busy = false; $("refresh").disabled = false;
   }
