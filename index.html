@@ -62,6 +62,7 @@
         font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;background:var(--flat-bg)}
   .pill.up{background:var(--up-bg)} .pill.down{background:var(--down-bg)}
   .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--ink)}
+  .pill.up,.pill.down,.pill.flat{color:#fff}
 
   /* 展開明細 */
   .detail{display:none;padding:0 16px 16px}
@@ -127,7 +128,7 @@ $("cards").innerHTML = STOCKS.map(s => `
     <div class="row" role="button" aria-expanded="false">
       <div style="min-width:0">
         <div class="nm">${s.name}</div>
-        <div class="meta">${s.code} · ${MARKET_LABEL[s.market]} · <span data-f="time">--</span></div>
+        <div class="meta">${s.code} · <span data-f="time">--</span></div>
       </div>
       <svg class="spark" data-f="spark" viewBox="0 0 64 30" preserveAspectRatio="none"></svg>
       <div class="right">
@@ -136,7 +137,7 @@ $("cards").innerHTML = STOCKS.map(s => `
       </div>
     </div>
     <div class="detail">
-      <div class="chg" data-f="chg"></div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline"><div class="chg" data-f="chg"></div><div class="time">${s.en} · ${MARKET_LABEL[s.market]}</div></div>
       <div class="stats">
         <div><span>開盤</span><b data-f="open">--</b></div>
         <div><span>最高</span><b data-f="high">--</b></div>
