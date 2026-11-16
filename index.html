@@ -93,7 +93,7 @@ const $ = id => document.getElementById(id);
 const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
 const fmt = (n, d = 2) => n == null ? "--" : n.toLocaleString("zh-TW", {minimumFractionDigits:d, maximumFractionDigits:d});
 
-async function fetchWithTimeout(url, opts = {}, ms = 10000){
+async function fetchWithTimeout(url, opts = {}, ms = 15000){
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), ms);
   try{
@@ -139,7 +139,7 @@ function fromDaily(rows){
     price: last.close, prev: before ? before.close : last.close - last.spread,
     open: last.open, high: last.max, low: last.min,
     vol: Math.round(last.Trading_Volume / 1000), bid: null, ask: null,
-    time: new Date(last.date + "T13:30:00+08:00"), source: "FinMind 收盤資料（即時報價暫時無法取得）",
+    time: new Date(last.date + "T13:30:00+08:00"), source: "FinMind 收盤資料",
   };
 }
 
@@ -188,22 +188,39 @@ function render(d){
 }
 
 let busy = false, dailyCache = null;
+async function fromMISRetry(){
+  try{ return await fromMIS(); }
+  catch(e){ return await fromMIS(); }   // 轉送服務偶爾很慢，失敗就再試一次
+}
 async function update(){
   if (busy) return;
   busy = true; $("refresh").disabled = true; $("msg").textContent = "";
+  $("src").textContent = "正在取得即時報價…";
   if ($("price").textContent === "--") $("time").textContent = "載入中…";
-  const [live, daily] = await Promise.allSettled([fromMIS(), dailyCache ? Promise.resolve(dailyCache) : fetchDaily()]);
-  if (daily.status === "fulfilled") dailyCache = daily.value;
+  let liveDone = false;
+  const liveP = fromMISRetry().finally(() => { liveDone = true; });
+  // 先拿日資料畫圖；若即時報價還沒到，先顯示最近收盤
   try{
-    let d, livePrice = null;
-    if (live.status === "fulfilled"){ d = live.value; livePrice = d.price; }
-    else if (dailyCache){ d = fromDaily(dailyCache); $("msg").textContent = "即時報價暫時無法取得（" + live.reason.message + "），先顯示最近收盤。"; }
-    else throw live.reason;
+    if (!dailyCache) dailyCache = await fetchDaily();
+    if (!liveDone && $("price").textContent === "--"){
+      const cls = render(fromDaily(dailyCache));
+      $("src").textContent = "先顯示最近收盤，正在取得即時報價…";
+      drawChart(dailyCache, null, cls);
+    }
+  }catch(e){}
+  try{
+    const d = await liveP;
     const cls = render(d);
-    drawChart(dailyCache, livePrice, cls);
+    drawChart(dailyCache, d.price, cls);
   }catch(e){
-    $("msg").textContent = "更新失敗：" + e.message + "，請稍後再按「更新」。";
-    $("time").textContent = "";
+    if (dailyCache){
+      if ($("price").textContent === "--") render(fromDaily(dailyCache));
+      $("src").textContent = "來源：FinMind 收盤資料";
+      $("msg").textContent = "即時報價暫時無法取得（" + e.message + "），請稍後再按「更新」。";
+    }else{
+      $("msg").textContent = "更新失敗：" + e.message + "，請稍後再按「更新」。";
+      $("time").textContent = "";
+    }
   }finally{
     busy = false; $("refresh").disabled = false;
   }
