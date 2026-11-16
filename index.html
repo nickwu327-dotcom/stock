@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>元太科技 8069 即時股價</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#fff; --ink:#1d2330; --muted:#6b7280; --line:#e5e7eb;
+    --up:#d6283b; --down:#14904a; --flat:#4b5563; --accent:#1f4fd1;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1218; --card:#181c25; --ink:#e8eaf0; --muted:#9aa3b2; --line:#2a3040; --accent:#6d93ff; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+       background:var(--bg);color:var(--ink);display:flex;justify-content:center;padding:32px 16px}
+  .card{width:100%;max-width:560px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  h1{margin:0;font-size:22px}
+  .code{color:var(--muted);font-size:14px;margin-top:4px}
+  button{border:0;background:var(--accent);color:#fff;font-size:15px;padding:10px 18px;border-radius:10px;cursor:pointer;
+         display:flex;align-items:center;gap:6px;white-space:nowrap}
+  button:disabled{opacity:.6;cursor:wait}
+  .spin{display:inline-block}
+  button:disabled .spin{animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .price-row{display:flex;align-items:baseline;gap:14px;margin:26px 0 6px;flex-wrap:wrap}
+  .price{font-size:52px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1}
+  .chg{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+  .up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--flat)}
+  .time{color:var(--muted);font-size:13px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);
+        border-radius:12px;overflow:hidden;margin-top:22px}
+  .grid div{background:var(--card);padding:12px}
+  .grid span{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+  .grid b{font-size:17px;font-variant-numeric:tabular-nums}
+  svg{width:100%;height:120px;margin-top:20px;display:block}
+  .foot{display:flex;justify-content:space-between;align-items:center;margin-top:18px;color:var(--muted);font-size:13px;gap:10px;flex-wrap:wrap}
+  .foot label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .msg{margin-top:14px;font-size:13px;color:var(--up);min-height:1em}
+  .note{color:var(--muted);font-size:12px;margin-top:18px;line-height:1.6}
+</style>
+</head>
+<body>
+<main class="card">
+  <header>
+    <div>
+      <h1>元太科技 E Ink Holdings</h1>
+      <div class="code">8069 · 上櫃（TPEx）· 新台幣</div>
+    </div>
+    <button id="refresh"><span class="spin">⟳</span> 更新</button>
+  </header>
+
+  <div class="price-row">
+    <div class="price" id="price">--</div>
+    <div class="chg" id="chg"></div>
+  </div>
+  <div class="time" id="time">載入中…</div>
+
+  <div class="grid">
+    <div><span>開盤</span><b id="open">--</b></div>
+    <div><span>最高</span><b id="high">--</b></div>
+    <div><span>最低</span><b id="low">--</b></div>
+    <div><span>昨收</span><b id="prev">--</b></div>
+    <div><span>成交量（張）</span><b id="vol">--</b></div>
+    <div><span>買 / 賣</span><b id="ba">--</b></div>
+  </div>
+
+  <svg id="chart" viewBox="0 0 500 120" preserveAspectRatio="none" aria-label="今日走勢"></svg>
+
+  <div class="foot">
+    <label><input type="checkbox" id="auto"> 盤中每 30 秒自動更新</label>
+    <span id="src"></span>
+  </div>
+  <div class="msg" id="msg"></div>
+
+  <p class="note">資料來源：臺灣證券交易所基本市況報導（MIS），備援為 Yahoo Finance，經公開 CORS 代理取得。
+    報價可能有數秒延遲，僅供參考，不構成投資建議。</p>
+</main>
+
+<script>
+const SYMBOL = "8069";
+const MIS_URL = () =>
+  `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${SYMBOL}.tw&json=1&delay=0&_=${Date.now()}`;
+const YAHOO_URL = () =>
+  `https://query1.finance.yahoo.com/v8/finance/chart/${SYMBOL}.TWO?interval=5m&range=1d&_=${Date.now()}`;
+
+// 靜態網頁無法直接跨網域呼叫證交所 / Yahoo，因此依序嘗試幾個公開 CORS 代理
+const PROXIES = [
+  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+];
+
+const $ = id => document.getElementById(id);
+const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
+const fmt = (n, d = 2) => n == null ? "--" : n.toLocaleString("zh-TW", {minimumFractionDigits:d, maximumFractionDigits:d});
+
+async function fetchJSON(url){
+  let lastErr;
+  for (const p of PROXIES){
+    try{
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch(p(url), {signal: ctrl.signal, cache: "no-store"});
+      clearTimeout(t);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return JSON.parse(await r.text());
+    }catch(e){ lastErr = e; }
+  }
+  throw lastErr || new Error("所有代理皆失敗");
+}
+
+async function fromMIS(){
+  const j = await fetchJSON(MIS_URL());
+  const s = j.msgArray && j.msgArray[0];
+  if (!s) throw new Error("MIS 無資料");
+  const bids = (s.b || "").split("_").map(num).filter(Boolean);
+  const asks = (s.a || "").split("_").map(num).filter(Boolean);
+  // z 為最近成交價；若為 "-"（該 5 秒無成交）改用最佳買賣價中點
+  let price = num(s.z);
+  if (price == null && bids[0] && asks[0]) price = (bids[0] + asks[0]) / 2;
+  if (price == null) price = bids[0] || asks[0] || null;
+  return {
+    price, prev: num(s.y), open: num(s.o), high: num(s.h), low: num(s.l),
+    vol: s.v ? parseInt(s.v, 10) : null, bid: bids[0], ask: asks[0],
+    time: s.tlong ? new Date(parseInt(s.tlong, 10)) : new Date(),
+    source: "證交所 MIS",
+  };
+}
+
+async function fromYahoo(){
+  const j = await fetchJSON(YAHOO_URL());
+  const r = j.chart.result[0], m = r.meta, q = r.indicators.quote[0];
+  const opens = (q.open || []).filter(v => v != null);
+  return {
+    price: m.regularMarketPrice, prev: m.chartPreviousClose ?? m.previousClose,
+    open: opens[0] ?? null, high: m.regularMarketDayHigh, low: m.regularMarketDayLow,
+    vol: m.regularMarketVolume != null ? Math.round(m.regularMarketVolume / 1000) : null,
+    bid: null, ask: null, time: new Date(m.regularMarketTime * 1000), source: "Yahoo Finance",
+    series: (q.close || []).filter(v => v != null),
+  };
+}
+
+async function fetchSeries(){
+  try{
+    const j = await fetchJSON(YAHOO_URL());
+    return (j.chart.result[0].indicators.quote[0].close || []).filter(v => v != null);
+  }catch{ return null; }
+}
+
+function drawChart(series, prev, cls){
+  const svg = $("chart");
+  if (!series || series.length < 2){ svg.innerHTML = ""; return; }
+  const vals = prev ? series.concat(prev) : series;
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  const W = 500, H = 120, pad = 6;
+  const x = i => i / (series.length - 1) * W;
+  const y = v => pad + (1 - (v - min) / span) * (H - pad * 2);
+  const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const color = getComputedStyle(document.documentElement).getPropertyValue(cls === "down" ? "--down" : cls === "up" ? "--up" : "--flat");
+  svg.innerHTML =
+    (prev ? `<line x1="0" x2="${W}" y1="${y(prev)}" y2="${y(prev)}" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="4 4"/>` : "") +
+    `<polygon points="0,${H} ${pts} ${W},${H}" fill="${color}" fill-opacity=".08"/>` +
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+}
+
+function render(d){
+  const diff = d.price != null && d.prev != null ? d.price - d.prev : null;
+  const cls = diff == null || Math.abs(diff) < 1e-9 ? "flat" : diff > 0 ? "up" : "down";
+  $("price").textContent = fmt(d.price);
+  $("price").className = "price " + cls;
+  $("chg").className = "chg " + cls;
+  $("chg").textContent = diff == null ? "" :
+    `${diff > 0 ? "▲" : diff < 0 ? "▼" : ""} ${fmt(Math.abs(diff))} (${diff >= 0 ? "+" : "-"}${fmt(Math.abs(diff / d.prev * 100))}%)`;
+  $("open").textContent = fmt(d.open);
+  $("high").textContent = fmt(d.high);
+  $("low").textContent = fmt(d.low);
+  $("prev").textContent = fmt(d.prev);
+  $("vol").textContent = d.vol == null ? "--" : d.vol.toLocaleString("zh-TW");
+  $("ba").textContent = d.bid || d.ask ? `${fmt(d.bid)} / ${fmt(d.ask)}` : "--";
+  $("time").textContent = "資料時間：" + d.time.toLocaleString("zh-TW", {hour12:false}) +
+    "　·　擷取於 " + new Date().toLocaleTimeString("zh-TW", {hour12:false});
+  $("src").textContent = "來源：" + d.source;
+  document.title = `${fmt(d.price)} ${diff > 0 ? "▲" : diff < 0 ? "▼" : ""} 元太 8069`;
+  return cls;
+}
+
+let busy = false;
+async function update(){
+  if (busy) return;
+  busy = true; $("refresh").disabled = true; $("msg").textContent = "";
+  try{
+    let d;
+    try{ d = await fromMIS(); }
+    catch(e){ d = await fromYahoo(); }
+    const cls = render(d);
+    drawChart(d.series || await fetchSeries(), d.prev, cls);
+  }catch(e){
+    $("msg").textContent = "更新失敗：" + e.message + "，請稍後再按「更新」。";
+    if ($("time").textContent === "載入中…") $("time").textContent = "";
+  }finally{
+    busy = false; $("refresh").disabled = false;
+  }
+}
+
+// 台股盤中（週一至週五 09:00–13:30，台北時間）
+function marketOpen(){
+  const tw = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Taipei"}));
+  const day = tw.getDay(), mins = tw.getHours() * 60 + tw.getMinutes();
+  return day >= 1 && day <= 5 && mins >= 540 && mins <= 810;
+}
+
+let timer = null;
+$("auto").addEventListener("change", e => {
+  clearInterval(timer);
+  if (e.target.checked) timer = setInterval(() => { if (marketOpen()) update(); }, 30000);
+});
+$("refresh").addEventListener("click", update);
+update();
+</script>
+</body>
+</html>
