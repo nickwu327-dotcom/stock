@@ -67,7 +67,8 @@
     <div><span>買 / 賣</span><b id="ba">--</b></div>
   </div>
 
-  <svg id="chart" viewBox="0 0 500 120" preserveAspectRatio="none" aria-label="今日走勢"></svg>
+  <svg id="chart" viewBox="0 0 500 120" preserveAspectRatio="none" aria-label="近期走勢"></svg>
+  <div class="time" id="chartLabel"></div>
 
   <div class="foot">
     <label><input type="checkbox" id="auto"> 盤中每 30 秒自動更新</label>
@@ -75,95 +76,94 @@
   </div>
   <div class="msg" id="msg"></div>
 
-  <p class="note">資料來源：臺灣證券交易所基本市況報導（MIS），備援為 Yahoo Finance，經公開 CORS 代理取得。
+  <p class="note">資料來源：即時報價取自臺灣證券交易所基本市況報導（MIS，經 r.jina.ai 轉送）；走勢圖與備援收盤價取自 FinMind。
     報價可能有數秒延遲，僅供參考，不構成投資建議。</p>
 </main>
 
 <script>
 const SYMBOL = "8069";
+// 即時報價：證交所 MIS，經 r.jina.ai 轉送（GitHub Pages 無法直接跨網域呼叫證交所）
 const MIS_URL = () =>
   `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=otc_${SYMBOL}.tw&json=1&delay=0&_=${Date.now()}`;
-const YAHOO_URL = () =>
-  `https://query1.finance.yahoo.com/v8/finance/chart/${SYMBOL}.TWO?interval=5m&range=1d&_=${Date.now()}`;
-
-// 靜態網頁無法直接跨網域呼叫證交所 / Yahoo，因此依序嘗試幾個公開 CORS 代理
-const PROXIES = [
-  u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  u => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-  u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-];
+// 備援與走勢圖：FinMind 日成交資料（支援跨網域）
+const FINMIND_URL = start =>
+  `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${SYMBOL}&start_date=${start}`;
 
 const $ = id => document.getElementById(id);
 const num = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
 const fmt = (n, d = 2) => n == null ? "--" : n.toLocaleString("zh-TW", {minimumFractionDigits:d, maximumFractionDigits:d});
 
-async function fetchJSON(url){
-  let lastErr;
-  for (const p of PROXIES){
-    try{
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 8000);
-      const r = await fetch(p(url), {signal: ctrl.signal, cache: "no-store"});
-      clearTimeout(t);
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return JSON.parse(await r.text());
-    }catch(e){ lastErr = e; }
-  }
-  throw lastErr || new Error("所有代理皆失敗");
+async function fetchWithTimeout(url, opts = {}, ms = 10000){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, {...opts, signal: ctrl.signal, cache: "no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return await r.text();
+  }catch(e){
+    throw e.name === "AbortError" ? new Error("連線逾時") : e;
+  }finally{ clearTimeout(t); }
 }
 
 async function fromMIS(){
-  const j = await fetchJSON(MIS_URL());
-  const s = j.msgArray && j.msgArray[0];
-  if (!s) throw new Error("MIS 無資料");
+  const text = await fetchWithTimeout(`https://r.jina.ai/${MIS_URL()}`,
+    {headers: {"X-No-Cache": "true", "X-Return-Format": "text"}});
+  const m = text.match(/\{"msgArray"[\s\S]*\}/);
+  if (!m) throw new Error("即時報價格式錯誤");
+  const s = JSON.parse(m[0]).msgArray[0];
+  if (!s) throw new Error("即時報價無資料");
   const bids = (s.b || "").split("_").map(num).filter(Boolean);
   const asks = (s.a || "").split("_").map(num).filter(Boolean);
-  // z 為最近成交價；若為 "-"（該 5 秒無成交）改用最佳買賣價中點
-  let price = num(s.z);
+  // z 為最近成交價；"-" 表示該 5 秒無成交，改用 trade.z（最後一筆成交），再不行用買賣中點
+  let price = num(s.z) ?? num(s.trade && s.trade.z);
   if (price == null && bids[0] && asks[0]) price = (bids[0] + asks[0]) / 2;
   if (price == null) price = bids[0] || asks[0] || null;
   return {
     price, prev: num(s.y), open: num(s.o), high: num(s.h), low: num(s.l),
     vol: s.v ? parseInt(s.v, 10) : null, bid: bids[0], ask: asks[0],
     time: s.tlong ? new Date(parseInt(s.tlong, 10)) : new Date(),
-    source: "證交所 MIS",
+    source: "證交所即時報價",
   };
 }
 
-async function fromYahoo(){
-  const j = await fetchJSON(YAHOO_URL());
-  const r = j.chart.result[0], m = r.meta, q = r.indicators.quote[0];
-  const opens = (q.open || []).filter(v => v != null);
+async function fetchDaily(){
+  const d = new Date(Date.now() - 45 * 864e5).toISOString().slice(0, 10);
+  const j = JSON.parse(await fetchWithTimeout(FINMIND_URL(d)));
+  if (!j.data || !j.data.length) throw new Error("日資料無內容");
+  return j.data;
+}
+
+function fromDaily(rows){
+  const last = rows[rows.length - 1], before = rows[rows.length - 2];
   return {
-    price: m.regularMarketPrice, prev: m.chartPreviousClose ?? m.previousClose,
-    open: opens[0] ?? null, high: m.regularMarketDayHigh, low: m.regularMarketDayLow,
-    vol: m.regularMarketVolume != null ? Math.round(m.regularMarketVolume / 1000) : null,
-    bid: null, ask: null, time: new Date(m.regularMarketTime * 1000), source: "Yahoo Finance",
-    series: (q.close || []).filter(v => v != null),
+    price: last.close, prev: before ? before.close : last.close - last.spread,
+    open: last.open, high: last.max, low: last.min,
+    vol: Math.round(last.Trading_Volume / 1000), bid: null, ask: null,
+    time: new Date(last.date + "T13:30:00+08:00"), source: "FinMind 收盤資料（即時報價暫時無法取得）",
   };
 }
 
-async function fetchSeries(){
-  try{
-    const j = await fetchJSON(YAHOO_URL());
-    return (j.chart.result[0].indicators.quote[0].close || []).filter(v => v != null);
-  }catch{ return null; }
-}
-
-function drawChart(series, prev, cls){
+function drawChart(rows, livePrice, cls){
   const svg = $("chart");
-  if (!series || series.length < 2){ svg.innerHTML = ""; return; }
-  const vals = prev ? series.concat(prev) : series;
-  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  if (!rows || rows.length < 2){ svg.innerHTML = ""; return; }
+  const today = new Date().toLocaleDateString("sv-SE", {timeZone: "Asia/Taipei"});
+  const series = rows.map(r => r.close);
+  if (livePrice != null){
+    if (rows[rows.length - 1].date === today) series[series.length - 1] = livePrice;
+    else series.push(livePrice);
+  }
+  const min = Math.min(...series), max = Math.max(...series), span = (max - min) || 1;
   const W = 500, H = 120, pad = 6;
   const x = i => i / (series.length - 1) * W;
   const y = v => pad + (1 - (v - min) / span) * (H - pad * 2);
   const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const color = getComputedStyle(document.documentElement).getPropertyValue(cls === "down" ? "--down" : cls === "up" ? "--up" : "--flat");
+  const color = getComputedStyle(document.documentElement)
+    .getPropertyValue(cls === "down" ? "--down" : cls === "up" ? "--up" : "--flat");
   svg.innerHTML =
-    (prev ? `<line x1="0" x2="${W}" y1="${y(prev)}" y2="${y(prev)}" stroke="currentColor" stroke-opacity=".25" stroke-dasharray="4 4"/>` : "") +
     `<polygon points="0,${H} ${pts} ${W},${H}" fill="${color}" fill-opacity=".08"/>` +
-    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>`;
+    `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke"/>` +
+    `<circle cx="${x(series.length - 1)}" cy="${y(series[series.length - 1])}" r="3.5" fill="${color}"/>`;
+  $("chartLabel").textContent = `近 ${series.length} 個交易日收盤走勢（${fmt(min)} – ${fmt(max)}）`;
 }
 
 function render(d){
@@ -187,19 +187,23 @@ function render(d){
   return cls;
 }
 
-let busy = false;
+let busy = false, dailyCache = null;
 async function update(){
   if (busy) return;
   busy = true; $("refresh").disabled = true; $("msg").textContent = "";
+  if ($("price").textContent === "--") $("time").textContent = "載入中…";
+  const [live, daily] = await Promise.allSettled([fromMIS(), dailyCache ? Promise.resolve(dailyCache) : fetchDaily()]);
+  if (daily.status === "fulfilled") dailyCache = daily.value;
   try{
-    let d;
-    try{ d = await fromMIS(); }
-    catch(e){ d = await fromYahoo(); }
+    let d, livePrice = null;
+    if (live.status === "fulfilled"){ d = live.value; livePrice = d.price; }
+    else if (dailyCache){ d = fromDaily(dailyCache); $("msg").textContent = "即時報價暫時無法取得（" + live.reason.message + "），先顯示最近收盤。"; }
+    else throw live.reason;
     const cls = render(d);
-    drawChart(d.series || await fetchSeries(), d.prev, cls);
+    drawChart(dailyCache, livePrice, cls);
   }catch(e){
     $("msg").textContent = "更新失敗：" + e.message + "，請稍後再按「更新」。";
-    if ($("time").textContent === "載入中…") $("time").textContent = "";
+    $("time").textContent = "";
   }finally{
     busy = false; $("refresh").disabled = false;
   }
